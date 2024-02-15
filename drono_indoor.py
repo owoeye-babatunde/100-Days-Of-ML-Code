@@ -136,3 +136,80 @@ if args.cuda:
 
 criterion = nn.BCEWithLogitsLoss()
 scheduler = MultiStepLR(optimizer, milestones=[100, 125], gamma=0.1)
+
+
+def pred_acc(original, predicted):
+    pred = torch.round(predicted).detach().numpy().astype(np.int64)
+    orig = original.detach().numpy()
+    pred = np.reshape(pred, (NumCell * (NumClass + 1), 1)).flatten()
+    orig = np.reshape(orig, (NumCell * (NumClass + 1), 1)).flatten()
+    num = 0
+    enum = 0
+    normal = np.asarray([0] * NumClass + [1])
+    for cell in range(0, (NumCell * (NumClass + 1)), NumClass + 1):
+        if (orig[cell:cell + NumClass + 1] == pred[cell:cell + NumClass + 1]).all():
+            num = num + 1
+        else:
+            if not (orig[cell:cell + NumClass + 1] == normal).all() and not (
+                    pred[cell:cell + NumClass + 1] == normal).all():
+                enum = enum + 1
+    return num / NumCell, (num + enum) / NumCell
+
+
+def train(epoch, model):
+    model.train()
+    for batch_idx, (data, target, filenames) in enumerate(train_loader):
+        if args.cuda:
+            data, target = data.cuda(), target.cuda()
+        optimizer.zero_grad()
+        output = model(data)
+        target = target.type_as(output)
+        loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+        if batch_idx % args.log_interval == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.5f}'.format(
+                epoch, batch_idx * len(data), len(train_loader.dataset),
+                       100. * batch_idx / len(train_loader), loss.item()))
+
+
+best_correct = -999
+
+
+def evaluate(model, data_loader, save_mode=False):
+    model.eval()
+    running_loss = []
+    running_acc = []
+    running_binary = []
+    global best_correct
+    with torch.no_grad():
+        for batch_idx, (data, target, filenames) in enumerate(data_loader):
+            if args.cuda:
+                data, target = data.cuda(), target.cuda()
+            output = model(data)
+            target = target.type_as(output)
+            loss = criterion(output, target)
+            output = torch.sigmoid(output)
+            acc_all = []
+            acc_binary = []
+            for each_image, d in enumerate(output):
+                all_acc, b_acc = pred_acc(torch.Tensor.cpu(target[each_image]), torch.Tensor.cpu(d))
+                acc_all.append(all_acc)
+                acc_binary.append(b_acc)
+            running_loss.append(loss.item())
+            running_acc.append(np.asarray(acc_all).mean())
+            running_binary.append(np.asarray(acc_binary).mean())
+    total_batch_loss = np.asarray(running_loss).mean()
+    total_batch_acc = np.asarray(running_acc).mean()
+    total_batch_binary = np.asarray(running_binary).mean()
+    print('\n loader set: total_batch_loss: {:.4f}, total imgs: {} , Acc: ({:.4f}%), Binary ACC: ({:.4f}%)\n'.format(
+        total_batch_loss, len(data_loader.dataset), total_batch_acc, total_batch_binary))
+    if save_mode:
+        now_correct = total_batch_acc
+        if best_correct < now_correct:
+            best_correct = now_correct
+            best_model_wts = copy.deepcopy(model.state_dict())
+            torch.save(best_model_wts,
+                       os.path.join(os.getcwd(), save_name + ".pth.tar"))
+            print("New weight!")
+    return total_batch_loss, total_batch_acc
