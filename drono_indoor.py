@@ -213,3 +213,39 @@ def evaluate(model, data_loader, save_mode=False):
                        os.path.join(os.getcwd(), save_name + ".pth.tar"))
             print("New weight!")
     return total_batch_loss, total_batch_acc
+
+if __name__ == '__main__':
+
+    import datetime
+
+    start_time = datetime.datetime.now()
+    print(save_name)
+    all_train_loss = []
+    all_train_acc = []
+    all_val_loss = []
+    all_val_acc = []
+    all_test_loss = []
+    all_test_acc = []
+    for epoch in range(1, args.epochs + 1):
+        train(epoch, model)
+        train_loss, train_acc = evaluate(model, train_loader)
+        val_loss, val_acc = evaluate(model, valid_loader, save_mode=True)
+        test_loss, test_acc = evaluate(model, test_loader)
+        all_train_acc.append(train_acc)
+        all_train_loss.append(train_loss)
+        all_val_acc.append(val_acc)
+        all_val_loss.append(val_loss)
+        all_test_loss.append(test_loss)
+        all_test_acc.append(test_acc)
+        scheduler.step()
+    list_res = []
+    for i in range(len(all_train_loss)):
+        list_res.append([all_train_loss[i], all_train_acc[i], all_val_loss[i], all_val_acc[i],
+                         all_test_loss[i], all_test_acc[i]])
+
+    column_name = ['train_loss', 'train_acc', 'val_loss', 'val_acc', 'test_loss', 'test_acc']
+    csv_name = save_name + '.csv'
+    xml_df = pd.DataFrame(list_res, columns=column_name)
+    xml_df.to_csv(csv_name, index=None)
+    end_time = datetime.datetime.now()
+    print('\nTime taken: {}\n'.format(end_time - start_time))
