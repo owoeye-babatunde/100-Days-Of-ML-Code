@@ -18,6 +18,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 ```
 
+
+
 ## Importing the dataset
 ```python
 dataset = pd.read_csv('Social_Network_Ads.csv')
